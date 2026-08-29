@@ -25,3 +25,24 @@ Next fix being tested: (1) stronger system prompt explicitly forbidding
 answering from memory, (2) one-shot example showing the exact tool-call
 pattern in-context. Small models follow demonstrated patterns more
 reliably than described rules — testing whether that closes the gap.
+
+## Round 2 — stronger prompt still 0/5, but new signal found
+
+Added a one-shot example + a much stricter system prompt forbidding
+answering from memory. Still 0/5 structured tool calls — but trial 2
+was revealing: the model responded "I would need to search the web
+for the most recent and accurate information" — i.e. it VERBALLY
+recognized it should search, but didn't trigger the tool mechanism.
+
+This changes the hypothesis. Instead of "model won't use tools,"
+now testing: "model IS attempting to call the tool, but is writing
+it as plain text (e.g. <tool_call>...</tool_call> inside content)
+rather than through llama.cpp's structured tool_calls field."
+
+This is a known category of bug — llama.cpp not correctly parsing
+Qwen2.5's tool-call text format into the API's structured field,
+independent of the model's own behavior.
+
+Patched the test script to detect this case explicitly (checking
+raw content for tool_call markers) instead of only checking the
+structured field. Re-running to confirm.
