@@ -75,7 +75,7 @@ deciding whether 1.5B is viable for the agent role at all.
 
 ## Round 4 — text protocol confirmed reliable (5/5), wiring real search
 
-02c_text_protocol.py hit 5/5 — the simple "SEARCH: <query>" convention
+03_real_search.py hit 5/5 — the simple "SEARCH: <query>" convention
 works reliably where full OpenAI-style JSON tool-calling did not.
 Conclusion: 1.5B can make the right decision (search vs. answer), it
 just can't reliably conform to a JSON function-calling schema. Simpler
