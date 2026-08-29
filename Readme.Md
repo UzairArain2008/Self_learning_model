@@ -1,0 +1,3 @@
+Experimenting on self learning model after training Right now using Qwen2.5-1.5B-Instruct-q4_k_m as of my hardware limit plus it's good for this experimentation
+
+02_test_tool.py --- this file is to test is model would be able to make a on internet to learn something on users command I didn't provide the direct access to internet but it's fake internet so but we failed as model didn't call the inertent yest it answers our questions as it's not dumb though so we gonna run the diagnose it 
