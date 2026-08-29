@@ -72,3 +72,21 @@ If this still fails, next step is testing the identical protocol
 against a larger model (7B class) to confirm whether this is a model
 size ceiling or a technique problem — an important distinction for
 deciding whether 1.5B is viable for the agent role at all.
+
+## Round 4 — text protocol confirmed reliable (5/5), wiring real search
+
+02c_text_protocol.py hit 5/5 — the simple "SEARCH: <query>" convention
+works reliably where full OpenAI-style JSON tool-calling did not.
+Conclusion: 1.5B can make the right decision (search vs. answer), it
+just can't reliably conform to a JSON function-calling schema. Simpler
+protocol, same underlying capability, no size upgrade needed for this
+step.
+
+Wired in a real search API (Tavily — built for LLM/agent use, clean
+result format, free tier). Loop is now: model emits SEARCH line →
+real Tavily call → results fed back as next turn → model answers
+grounded in retrieved content instead of memory.
+
+Not yet added: trust-tiering of returned sources (official docs vs.
+random blog) or staleness checking — next step once this baseline
+round-trip is confirmed working end to end.
