@@ -74,11 +74,34 @@ def run_test(task: str, n_trials: int = 5):
             {
                 "role": "system",
                 "content": (
-                    "You are an assistant that must use the web_search tool "
-                    "to look up anything you're not certain about. Do not "
-                    "guess or answer from memory for factual lookups."
+                    "You have NO knowledge of anything after your training cutoff, "
+                    "and you are FORBIDDEN from answering factual or best-practice "
+                    "questions from memory. For ANY question asking what is "
+                    "'current', 'recommended', 'best', or 'latest', you MUST "
+                    "call web_search first and wait for results before answering. "
+                    "Answering without calling the tool first is a failure."
                 ),
             },
+            # One-shot example showing the exact behavior we want, since
+            # small models follow a demonstrated pattern far more reliably
+            # than a described rule.
+            {"role": "user", "content": "What is the current best way to hash passwords in Python?"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "example_1",
+                        "type": "function",
+                        "function": {
+                            "name": "web_search",
+                            "arguments": json.dumps({"query": "best way to hash passwords Python 2026"}),
+                        },
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "example_1", "content": "[example result — use bcrypt or argon2]"},
+            {"role": "assistant", "content": "Based on current sources, bcrypt or argon2 are recommended."},
             {"role": "user", "content": task},
         ]
         result = call_model(messages)
