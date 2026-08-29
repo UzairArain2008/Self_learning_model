@@ -1,137 +1,79 @@
 """
-Step 2 — Confirm the model can reliably call tools in a parseable format.
+Step 2c — Text-protocol tool triggering (no OpenAI tools/tool_calls API).
 
-This does NOT hit the real internet yet. The "search" tool below is fake —
-it just returns a canned result — because the only thing we're testing here
-is: does the model correctly decide to call a tool, and does it format the
-call so we can parse it? That's a model/prompt-format question, separate
-from "does search work," so we isolate it first.
+Rationale: llama.cpp's own docs only list native tool-calling as
+verified at Qwen2.5-7B+, not 1.5B. Our 0/5 results across two prompt
+strategies, with the model verbally acknowledging it should search but
+never emitting a structured or even raw-text tool call, suggests this
+is a capability limit at this size — not a fixable prompt issue.
 
-Run: python 02_test_tools.py
-Requires: pip install requests
+Fix: instead of asking the model to conform to a JSON function-call
+schema, ask it to output one exact plain-text line when it wants to
+search. This is a much simpler pattern for a small model to learn and
+follow, and we parse it ourselves in Python — no reliance on
+llama.cpp's tool-call parser or the model's schema adherence at all.
+
+Run: python 02c_text_protocol.py
 """
 
-import json
+import re
 import requests
 
 LLAMA_SERVER_URL = "http://127.0.0.1:8080/v1/chat/completions"
 
-# Minimal tool schema, OpenAI-style function calling format.
-# Qwen2.5-Instruct was trained on this format, so llama-server (with --jinja)
-# should translate it into the model's native tool-call template.
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "web_search",
-            "description": "Search the web for information on a topic.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query.",
-                    }
-                },
-                "required": ["query"],
-            },
-        },
-    }
-]
+SEARCH_PATTERN = re.compile(r"^SEARCH:\s*(.+)$", re.MULTILINE)
+
+SYSTEM_PROMPT = (
+    "You cannot know anything current or 'best practice' from memory alone — "
+    "your training data is outdated for fast-moving topics.\n\n"
+    "If the user's question involves current, recommended, latest, or best "
+    "practices, you MUST respond with EXACTLY one line and nothing else:\n"
+    "SEARCH: <your search query>\n\n"
+    "Do not explain, do not answer the question, do not add anything else. "
+    "Just that one line. You will get the search results in the next turn "
+    "and can answer then."
+)
 
 
-def fake_web_search(query: str) -> str:
-    """Stand-in for a real search call — step 3 replaces this."""
-    return f"[FAKE RESULT] Top result for '{query}': example.com/some-doc"
-
-
-def call_model(messages: list) -> dict:
+def call_model(task: str) -> str:
     resp = requests.post(
         LLAMA_SERVER_URL,
         json={
-            "messages": messages,
-            "tools": TOOLS,
-            "tool_choice": "auto",
-            "temperature": 0.2,  # low temp: we want consistent, parseable output, not creativity
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": task},
+            ],
+            "temperature": 0.1,  # low — we want exact format compliance, not variety
+            "max_tokens": 100,   # a SEARCH line is short; caps runaway generation
         },
         timeout=60,
     )
     resp.raise_for_status()
-    return resp.json()
+    return resp.json()["choices"][0]["message"]["content"] or ""
 
 
 def run_test(task: str, n_trials: int = 5):
-    """
-    Ask the model to do something that clearly requires a tool call,
-    n_trials times, and report how often it actually produces a valid,
-    parseable tool call vs. just answering in plain text (which would
-    mean it's hallucinating an answer instead of looking it up — bad
-    for an agent that's supposed to verify things before trusting them).
-    """
     successes = 0
     for i in range(n_trials):
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You have NO knowledge of anything after your training cutoff, "
-                    "and you are FORBIDDEN from answering factual or best-practice "
-                    "questions from memory. For ANY question asking what is "
-                    "'current', 'recommended', 'best', or 'latest', you MUST "
-                    "call web_search first and wait for results before answering. "
-                    "Answering without calling the tool first is a failure."
-                ),
-            },
-            # One-shot example showing the exact behavior we want, since
-            # small models follow a demonstrated pattern far more reliably
-            # than a described rule.
-            {"role": "user", "content": "What is the current best way to hash passwords in Python?"},
-            {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [
-                    {
-                        "id": "example_1",
-                        "type": "function",
-                        "function": {
-                            "name": "web_search",
-                            "arguments": json.dumps({"query": "best way to hash passwords Python 2026"}),
-                        },
-                    }
-                ],
-            },
-            {"role": "tool", "tool_call_id": "example_1", "content": "[example result — use bcrypt or argon2]"},
-            {"role": "assistant", "content": "Based on current sources, bcrypt or argon2 are recommended."},
-            {"role": "user", "content": task},
-        ]
-        result = call_model(messages)
-        choice = result["choices"][0]["message"]
-
-        tool_calls = choice.get("tool_calls")
-        if tool_calls:
+        content = call_model(task).strip()
+        match = SEARCH_PATTERN.match(content)
+        if match:
             successes += 1
-            call = tool_calls[0]["function"]
-            print(f"[trial {i+1}] OK — called {call['name']} with args: {call['arguments']}")
-            # Sanity-check the arguments actually parse as JSON
-            try:
-                json.loads(call["arguments"])
-            except json.JSONDecodeError:
-                print(f"  WARNING: arguments not valid JSON: {call['arguments']!r}")
-                successes -= 1
+            print(f"[trial {i+1}] OK — wants to search: {match.group(1)!r}")
         else:
-            print(f"[trial {i+1}] FAIL — no tool call, model just answered:")
-            print(f"  {choice.get('content', '')[:200]}")
+            print(f"[trial {i+1}] FAIL — didn't use the SEARCH: format:")
+            print(f"  {content[:200]}")
 
-    print(f"\n{successes}/{n_trials} trials produced a valid, parseable tool call.")
-    if successes < n_trials:
-        print(
-            "Below 100%: before building real tools on top of this, worth "
-            "tightening the system prompt or trying a slightly higher/lower "
-            "temperature — an unreliable tool-call format will silently "
-            "break the verification loop later (a 'search' that never "
-            "happened looks identical to a search that did, from memory's "
-            "point of view)."
-        )
+    print(f"\n{successes}/{n_trials} trials used the search protocol correctly.")
+    if successes >= 4:
+        print("Reliable enough to build on. Next: wire in a real search call and")
+        print("feed results back as the next user turn, then re-ask for the answer.")
+    else:
+        print("Still unreliable. If this fails too, the honest conclusion is that")
+        print("1.5B is under-powered for spontaneous tool-use decisions even with")
+        print("the simplest possible protocol — worth testing the same script")
+        print("against a larger model (even a free API-hosted 7B+) to confirm")
+        print("it's a size ceiling, not a technique problem.")
 
 
 if __name__ == "__main__":

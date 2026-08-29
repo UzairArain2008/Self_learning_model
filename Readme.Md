@@ -46,3 +46,29 @@ independent of the model's own behavior.
 Patched the test script to detect this case explicitly (checking
 raw content for tool_call markers) instead of only checking the
 structured field. Re-running to confirm.
+
+## Round 3 — ruled out parser bug, pivoting to text protocol
+
+Re-ran with content-inspection added: 0/5 again, and this time NO
+tool_call markers appeared in raw text either (previous run had shown
+the model verbally acknowledging it should search). Rules out the
+"llama.cpp isn't parsing a text-form tool call" hypothesis from Round 2.
+
+New evidence found: llama.cpp's own documentation only lists native
+tool-calling as verified starting at Qwen2.5-7B, not 1.5B. Combined with
+0/5 across two different prompting strategies, working hypothesis is
+now: this may be a genuine capability ceiling at 1.5B for spontaneous
+structured tool-use decisions, not a fixable prompt/config issue.
+
+Decision: instead of continuing to force OpenAI-style JSON function
+calling (a schema-conformance task), pivoted to the simplest possible
+alternative — a one-line plain-text convention ("SEARCH: <query>")
+parsed manually in Python, bypassing llama.cpp's tool-call machinery
+entirely. Rationale: this is a much easier pattern for a small model
+to learn than JSON-schema adherence, and removes an entire layer
+(the tool-call parser) as a source of failure.
+
+If this still fails, next step is testing the identical protocol
+against a larger model (7B class) to confirm whether this is a model
+size ceiling or a technique problem — an important distinction for
+deciding whether 1.5B is viable for the agent role at all.
