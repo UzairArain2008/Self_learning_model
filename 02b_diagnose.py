@@ -74,7 +74,7 @@ def check_forced_tool_choice():
             "tool_choice": "required",
             "temperature": 0.2,
         },
-        timeout=60,
+        timeout=300,  # forced/grammar-constrained decoding can be much slower on CPU
     )
     resp.raise_for_status()
     result = resp.json()
