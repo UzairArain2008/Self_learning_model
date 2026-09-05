@@ -74,13 +74,29 @@ def load_skills() -> list[dict]:
         return [json.loads(line) for line in f if line.strip()]
 
 
-def find_existing_skill(query: str) -> dict | None:
-    """Check if we already learned something for this exact query, so the
-    pipeline can skip re-searching (and re-spending search-API calls) for
-    a duplicate request."""
+REUSABLE_CONFIDENCE = {"verified", "likely"}  # tiers worth reusing without re-searching
+
+
+def find_existing_skill(query: str, min_confidence_to_reuse: bool = True) -> dict | None:
+    """
+    Check if we already learned something for this exact query.
+
+    min_confidence_to_reuse=True (default): only returns a memory hit if the
+    stored confidence is "verified" or "likely". An "unverified" or "failed"
+    record won't short-circuit a fresh search — it stays in the memory file
+    as a record (useful for the audit trail / research comparison), but the
+    pipeline gets another chance to find something better next time instead
+    of permanently reusing a low-confidence answer forever.
+
+    Pass min_confidence_to_reuse=False to get the old behavior (reuse
+    anything, including unverified hits) — useful if you specifically want
+    to inspect what's stored rather than trigger a re-search.
+    """
     skill_id = _make_skill_id(query)
     for record in load_skills():
         if record["skill_id"] == skill_id:
+            if min_confidence_to_reuse and record["confidence"] not in REUSABLE_CONFIDENCE:
+                return None  # known, but not good enough to reuse — let it re-search
             return record
     return None
 
