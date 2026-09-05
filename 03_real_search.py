@@ -129,6 +129,16 @@ def answer_with_search(task: str):
         }
     )
     final_answer = call_model(messages).strip()
+
+    # Don't rely on the model to remember to caveat itself — we already know
+    # the tier objectively, so enforce the disclaimer in code, not prompting.
+    if best_tier == 3:
+        final_answer = (
+            "⚠️ UNVERIFIED — all sources were Tier 3 (blogs/forums, no official "
+            "docs found). Treat this as a starting point, not confirmed guidance:\n\n"
+            + final_answer
+        )
+
     print("Final answer:")
     print(final_answer)
 
