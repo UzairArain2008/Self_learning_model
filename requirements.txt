@@ -1,0 +1,3 @@
+requests
+tavily-python
+python-dotenv
