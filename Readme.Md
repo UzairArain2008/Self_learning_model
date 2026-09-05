@@ -163,3 +163,40 @@ is the cheap first filter; not a full solve.
 Next: wire this into the real search->answer pipeline, and decide
 whether a failed check should just flag the answer or trigger an
 automatic retry with the error fed back to the model.
+
+## Round 9 — full 8-question comparison run: naive vs. verified
+
+Ran the fixed 8-question test set through both pipelines.
+
+RESULT: 6/8 questions had a true source tier of 3 (search results were
+entirely unverified blogs/forums). The naive pipeline stored all 6 as
+confidence="trusted" with zero indication of low source quality. The
+verified pipeline correctly flagged 5/6 of these as "unverified"
+(6th caused a bug — see below).
+
+Headline number for the writeup: naive pipeline confidently mislabeled
+6/8 answers; verified pipeline caught 5/6 of them.
+
+Two new findings from this run, not previously seen:
+
+1. CONTENT CONTAMINATION: on 2 questions (CORS, rate limiting), a
+   Tier 1 (official docs) source was found, earning confidence=
+   "verified" — but the actual answer text traced back to a Tier 3
+   source shown alongside it, not the official doc. Honest limitation:
+   the current tier system checks "was a good source present," not
+   "did the model actually rely on the good source." Worth stating
+   explicitly in the final writeup as a known gap, not hidden.
+
+2. BUG: on one question, the model's second response (after seeing
+   search results) was itself another "SEARCH: ..." line — a second
+   search attempt the pipeline doesn't support. This got stored
+   verbatim as if it were a real (if unverified) answer. Fixed by
+   detecting a second SEARCH: pattern and refusing to save it as a
+   skill at all, rather than mislabeling failed generation as a
+   low-confidence answer.
+
+Also compared JWT storage question specifically: naive answer states
+"encrypt JWT using bcrypt" — bcrypt is a one-way hash, not reversible
+encryption, so this advice doesn't actually work as described. A
+concrete example of confidently-wrong naive output, useful for the
+writeup's qualitative examples section alongside the file-upload case.

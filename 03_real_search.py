@@ -144,6 +144,14 @@ def answer_with_search(task: str):
     )
     final_answer = call_model(messages).strip()
 
+    # Guard against the model trying to search again instead of answering —
+    # the pipeline only handles one search hop, so a second SEARCH: here
+    # means generation failed, not that we have a real (if shaky) answer.
+    if SEARCH_PATTERN.match(final_answer):
+        print(f"[FAILED] Model tried to search again instead of answering: {final_answer!r}")
+        print("Not saving this as a skill — it's a failed generation, not an unverified answer.")
+        return
+
     # Don't rely on the model to remember to caveat itself — we already know
     # the tier objectively, so enforce the disclaimer in code, not prompting.
     if best_tier == 3:
