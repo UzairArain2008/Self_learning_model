@@ -139,3 +139,27 @@ we can already determine objectively (source tier, test pass/fail,
 staleness by date) should be enforced in code, not left as a prompted
 instruction to a small model. Reserve prompting for genuine judgment
 calls where no objective check exists.
+
+## Round 8 — added a native syntax check, found a second bad-lesson example
+
+Noticed the multer example from the last run has no `fileFilter` —
+meaning it doesn't actually validate file type despite claiming to.
+Different failure mode than trust-tiering catches: this isn't about
+source credibility, it's about the generated code being wrong/
+incomplete regardless of source.
+
+Added 04_sandbox_check.py: extracts the code block from a model's
+answer and runs `node --check` on it in an isolated temp file —
+parses only, doesn't execute, so it's safe even on untrusted
+generated code. This is the cheapest possible verification step
+(native tool, no custom parser) and catches syntax-level hallucinations
+before they'd ever be stored as a "verified" skill.
+
+Scoped honestly: this only catches syntax errors, not semantic ones
+like the missing fileFilter — that needs actual behavioral testing
+against real inputs, which is a bigger step for later. Syntax check
+is the cheap first filter; not a full solve.
+
+Next: wire this into the real search->answer pipeline, and decide
+whether a failed check should just flag the answer or trigger an
+automatic retry with the error fed back to the model.
