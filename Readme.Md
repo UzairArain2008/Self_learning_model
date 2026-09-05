@@ -90,3 +90,24 @@ grounded in retrieved content instead of memory.
 Not yet added: trust-tiering of returned sources (official docs vs.
 random blog) or staleness checking — next step once this baseline
 round-trip is confirmed working end to end.
+
+## Round 5 — added trust-tiering after catching a real bad-lesson example
+
+Round 4's live test exposed the exact failure mode this project is
+about: all 3 search results were unverified blogs (DEV.to, Medium,
+a personal blog), and the synthesized answer had a real security gap
+— it recommended validating uploads via file extension and
+client-supplied MIME type, both of which are trivially spoofable by
+an attacker. No official/authoritative source was among the results,
+and nothing in the pipeline flagged that.
+
+Added trust-tiering to 03_real_search.py: domains classified as
+Tier 1 (official docs — nodejs.org, OWASP, MDN, etc.), Tier 2
+(established publications), or Tier 3 (everything else, default).
+The model is now told explicitly when all sources are Tier 3, and
+instructed to caveat its answer as provisional rather than confident
+in that case.
+
+Next: re-run with the same test question and confirm the model
+actually changes its confidence framing when sources are low-tier,
+not just that the tier label gets computed correctly.
