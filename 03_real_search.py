@@ -14,6 +14,7 @@ import requests
 from dotenv import load_dotenv
 from tavily import TavilyClient
 from verification import extract_code, check_syntax
+from skill_memory import save_skill, find_existing_skill
 
 load_dotenv()  # reads .env in the working directory into os.environ
 
@@ -73,23 +74,35 @@ def call_model(messages: list) -> str:
     return resp.json()["choices"][0]["message"]["content"] or ""
 
 
-def real_web_search(query: str, max_results: int = 3) -> tuple[str, int]:
+def real_web_search(query: str, max_results: int = 3) -> tuple[str, int, list[str]]:
     """
-    Real search via Tavily. Returns (digest text for the model, best tier found)
-    so the caller can decide whether to trust a confident answer or flag it.
+    Real search via Tavily. Returns (digest text for the model, best tier
+    found, list of source URLs) — the URL list is needed so a saved skill
+    record can show exactly where it came from, not just a tier number.
     """
     results = tavily.search(query=query, max_results=max_results)
     lines = []
+    urls = []
     best_tier = 3
     for r in results.get("results", []):
         tier = classify_domain(r["url"])
         best_tier = min(best_tier, tier)
+        urls.append(r["url"])
         lines.append(f"- [Tier {tier}] {r['title']} ({r['url']})\n  {r['content'][:300]}")
     digest = "\n".join(lines) if lines else "No results found."
-    return digest, best_tier
+    return digest, best_tier, urls
 
 
 def answer_with_search(task: str):
+    # Check memory first — don't spend a search-API call re-learning
+    # something we already have a record for.
+    existing = find_existing_skill(task)
+    if existing is not None:
+        print(f"[Memory hit] Already learned this (confidence: {existing['confidence']}, "
+              f"learned {existing['learned_at']}):\n")
+        print(existing["answer"])
+        return
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": task},
@@ -104,7 +117,7 @@ def answer_with_search(task: str):
 
     query = match.group(1).strip('"')
     print(f"Model wants to search: {query!r}")
-    search_results, best_tier = real_web_search(query)
+    search_results, best_tier, source_urls = real_web_search(query)
     print(f"\n--- Search results (best tier found: {best_tier}) ---\n{search_results}\n----------------------\n")
 
     confidence_note = (
@@ -157,6 +170,17 @@ def answer_with_search(task: str):
 
     print("Final answer:")
     print(final_answer)
+
+    saved = save_skill(
+        query=task,
+        answer=final_answer,
+        source_urls=source_urls,
+        best_tier=best_tier,
+        code=code,
+        syntax_passed=(passed if code is not None else None),
+        syntax_message=(message if code is not None else None),
+    )
+    print(f"\n[Saved to memory] skill_id={saved['skill_id']} confidence={saved['confidence']}")
 
 
 if __name__ == "__main__":
