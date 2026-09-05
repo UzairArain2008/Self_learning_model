@@ -11,10 +11,36 @@ Run: python 03_real_search.py
 import os
 import re
 import requests
+from dotenv import load_dotenv
 from tavily import TavilyClient
+
+load_dotenv()  # reads .env in the working directory into os.environ
 
 LLAMA_SERVER_URL = "http://127.0.0.1:8080/v1/chat/completions"
 SEARCH_PATTERN = re.compile(r"^SEARCH:\s*(.+)$", re.MULTILINE)
+
+# Tier 1: official docs / authoritative standards bodies for the domains we
+# expect to search (extend this list as you hit new domains in testing).
+TIER_1_DOMAINS = [
+    "nodejs.org", "expressjs.com", "developer.mozilla.org", "owasp.org",
+    "reactjs.org", "react.dev", "npmjs.com", "github.com",
+]
+# Tier 2: established, edited technical publications (not personal blogs).
+TIER_2_DOMAINS = [
+    "digitalocean.com", "freecodecamp.org", "smashingmagazine.com",
+]
+# Everything else (personal blogs, Medium, dev.to, random sites) is Tier 3.
+
+
+def classify_domain(url: str) -> int:
+    for d in TIER_1_DOMAINS:
+        if d in url:
+            return 1
+    for d in TIER_2_DOMAINS:
+        if d in url:
+            return 2
+    return 3
+
 
 SYSTEM_PROMPT = (
     "You cannot know anything current or 'best practice' from memory alone — "
@@ -27,7 +53,13 @@ SYSTEM_PROMPT = (
     "and can answer then."
 )
 
-tavily = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])  # fails loudly if unset — don't hardcode keys
+tavily_key = os.environ.get("TAVILY_API_KEY")
+if not tavily_key:
+    raise RuntimeError(
+        "TAVILY_API_KEY not found. Create a .env file (see .env.example) "
+        "with TAVILY_API_KEY=your_key_here — never hardcode it in the script."
+    )
+tavily = TavilyClient(api_key=tavily_key)
 
 
 def call_model(messages: list) -> str:
@@ -40,13 +72,20 @@ def call_model(messages: list) -> str:
     return resp.json()["choices"][0]["message"]["content"] or ""
 
 
-def real_web_search(query: str, max_results: int = 3) -> str:
-    """Real search via Tavily. Returns a plain-text digest for the model to read."""
+def real_web_search(query: str, max_results: int = 3) -> tuple[str, int]:
+    """
+    Real search via Tavily. Returns (digest text for the model, best tier found)
+    so the caller can decide whether to trust a confident answer or flag it.
+    """
     results = tavily.search(query=query, max_results=max_results)
     lines = []
+    best_tier = 3
     for r in results.get("results", []):
-        lines.append(f"- {r['title']} ({r['url']})\n  {r['content'][:300]}")
-    return "\n".join(lines) if lines else "No results found."
+        tier = classify_domain(r["url"])
+        best_tier = min(best_tier, tier)
+        lines.append(f"- [Tier {tier}] {r['title']} ({r['url']})\n  {r['content'][:300]}")
+    digest = "\n".join(lines) if lines else "No results found."
+    return digest, best_tier
 
 
 def answer_with_search(task: str):
@@ -64,16 +103,25 @@ def answer_with_search(task: str):
 
     query = match.group(1).strip('"')
     print(f"Model wants to search: {query!r}")
-    search_results = real_web_search(query)
-    print(f"\n--- Search results ---\n{search_results}\n----------------------\n")
+    search_results, best_tier = real_web_search(query)
+    print(f"\n--- Search results (best tier found: {best_tier}) ---\n{search_results}\n----------------------\n")
 
-    # Feed results back as the next turn and ask for a final answer.
+    confidence_note = (
+        "All sources found are Tier 3 (unverified — personal blogs, forums, etc). "
+        "You MUST caveat your answer as provisional and note it hasn't been "
+        "checked against official documentation."
+        if best_tier == 3
+        else "At least one Tier 1/2 (official docs or established publication) "
+        "source was found — you can answer with normal confidence."
+    )
+
     messages.append({"role": "assistant", "content": first_response})
     messages.append(
         {
             "role": "user",
             "content": (
                 f"Here are the search results:\n\n{search_results}\n\n"
+                f"Source quality note: {confidence_note}\n\n"
                 f"Now answer the original question: {task}\n"
                 "Base your answer only on these results. If they don't fully "
                 "answer it, say what's still uncertain rather than guessing."

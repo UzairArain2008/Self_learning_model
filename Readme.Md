@@ -111,3 +111,31 @@ in that case.
 Next: re-run with the same test question and confirm the model
 actually changes its confidence framing when sources are low-tier,
 not just that the tier label gets computed correctly.
+
+## Round 6 — moved API key to .env, added .gitignore
+
+Since this repo is public, hardcoding or manually exporting the API
+key each session was a real risk of accidental leakage. Switched to
+python-dotenv: real key lives in a local .env (gitignored, never
+committed), .env.example documents the required variable without a
+real value. Script now fails with a clear error if the key is
+missing, instead of a raw KeyError.
+
+## Round 7 — stopped trusting the model to self-caveat
+
+Added an instruction telling the model to caveat its answer when all
+sources were Tier 3. Model ignored it and answered with full confidence
+anyway (search results were Reddit/Medium/a blog — genuinely Tier 3,
+correctly classified — but the "you MUST caveat" instruction, buried
+in a long user turn, didn't change its output).
+
+Fix: stopped asking the model to remember this at all. Since the tier
+is already computed objectively in Python, the disclaimer is now
+prepended in code whenever best_tier == 3 — not dependent on model
+instruction-following.
+
+General pattern worth keeping for the rest of this project: anything
+we can already determine objectively (source tier, test pass/fail,
+staleness by date) should be enforced in code, not left as a prompted
+instruction to a small model. Reserve prompting for genuine judgment
+calls where no objective check exists.
