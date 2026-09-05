@@ -200,3 +200,34 @@ Also compared JWT storage question specifically: naive answer states
 encryption, so this advice doesn't actually work as described. A
 concrete example of confidently-wrong naive output, useful for the
 writeup's qualitative examples section alongside the file-upload case.
+
+## Round 10 — clean final comparison, bug fix confirmed
+
+Cleared skills.jsonl and re-ran both pipelines on the fixed 8-question
+set.
+
+Verified pipeline: 7/8 questions produced a saved answer (the 8th
+correctly triggered the Round 9 bug fix — model tried to search again
+instead of answering, and the pipeline refused to save it rather than
+storing garbage with a confidence label). Of the 7 saved: 6 were
+Tier 3 sources, all correctly flagged "unverified"; 1 was Tier 2,
+flagged "likely". 0 mislabeled.
+
+Naive baseline: 8/8 saved as confidence="trusted" — no differentiation
+by source quality at all, including the 6 answers sourced entirely
+from blogs/forums.
+
+RESULT: verified pipeline correctly differentiated trust level on
+7/7 saved answers; naive pipeline differentiated on 0/8. This is the
+core comparison result for the writeup.
+
+CAVEAT (important, stating honestly): re-running the same CORS and
+rate-limiting queries across two separate sessions returned different
+source tiers each time (Tier 1 docs found in run 1, Tier 3 only in
+run 2) — live web search isn't fully reproducible run-to-run. This
+comparison demonstrates the mechanism working correctly on the inputs
+it received, not a fully controlled repeatable experiment. Noting this
+explicitly rather than presenting the numbers as more rigorous than
+they are.
+
+This closes the core verification-loop comparison phase.

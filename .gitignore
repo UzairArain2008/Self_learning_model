@@ -2,3 +2,4 @@
 __pycache__/
 *.pyc
 skills.jsonl
+naive_skills.jsonl
