@@ -92,5 +92,5 @@ MIT — see [LICENSE](LICENSE).
 
 ## Full development log
 
-See [REPORT.md](REPORT.md) for the complete round-by-round debugging
+See [REPORT.md](Report.Md) for the complete round-by-round debugging
 history, including dead ends.
