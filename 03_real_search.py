@@ -13,6 +13,7 @@ import re
 import requests
 from dotenv import load_dotenv
 from tavily import TavilyClient
+from verification import extract_code, check_syntax
 
 load_dotenv()  # reads .env in the working directory into os.environ
 
@@ -134,10 +135,25 @@ def answer_with_search(task: str):
     # the tier objectively, so enforce the disclaimer in code, not prompting.
     if best_tier == 3:
         final_answer = (
-            "⚠️ UNVERIFIED — all sources were Tier 3 (blogs/forums, no official "
+            "⚠️ UNVERIFIED SOURCE — all sources were Tier 3 (blogs/forums, no official "
             "docs found). Treat this as a starting point, not confirmed guidance:\n\n"
             + final_answer
         )
+
+    # Syntax-check any code the answer produced. This is a separate check
+    # from source trust — code can come from a great source and still be
+    # wrong, or from a bad source and still happen to be syntactically valid.
+    code = extract_code(final_answer)
+    if code is not None:
+        passed, message = check_syntax(code)
+        if passed:
+            print(f"[Code check] PASS — {message}")
+        else:
+            print(f"[Code check] FAIL — {message}")
+            final_answer = (
+                "⚠️ CODE FAILED SYNTAX CHECK — do not use as-is:\n"
+                f"({message})\n\n" + final_answer
+            )
 
     print("Final answer:")
     print(final_answer)
