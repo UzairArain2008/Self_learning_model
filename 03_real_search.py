@@ -184,4 +184,7 @@ def answer_with_search(task: str):
 
 
 if __name__ == "__main__":
-    answer_with_search("What is the current recommended way to validate file uploads in Node.js?")
+    from test_questions import TEST_QUESTIONS
+    for q in TEST_QUESTIONS:
+        print(f"\n{'='*70}\n{q}\n{'='*70}")
+        answer_with_search(q)

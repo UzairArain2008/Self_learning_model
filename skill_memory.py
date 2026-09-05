@@ -83,3 +83,37 @@ def find_existing_skill(query: str) -> dict | None:
         if record["skill_id"] == skill_id:
             return record
     return None
+
+
+def save_skill_to(
+    filepath: Path,
+    query: str,
+    answer: str,
+    source_urls: list[str],
+    best_tier: int,
+    code: str | None,
+    syntax_passed: bool | None,
+    syntax_message: str | None,
+    confidence_override: str | None = None,
+) -> dict:
+    """
+    Same record shape as save_skill, but writes to an arbitrary file and
+    allows overriding the confidence field — used by the naive baseline to
+    force 'trusted' regardless of tier/syntax, simulating a system that
+    does no verification at all.
+    """
+    record = {
+        "skill_id": _make_skill_id(query),
+        "query": query,
+        "answer": answer,
+        "source_urls": source_urls,
+        "source_tier": best_tier,
+        "code": code,
+        "syntax_passed": syntax_passed,
+        "syntax_message": syntax_message,
+        "confidence": confidence_override or _compute_confidence(best_tier, syntax_passed),
+        "learned_at": datetime.datetime.utcnow().isoformat() + "Z",
+    }
+    with filepath.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record) + "\n")
+    return record
